@@ -25,6 +25,12 @@
   },
   {
     "name": "Developper",
+    "score": 79,
+    "coins": 14,
+    "t": 1769363730993
+  },
+  {
+    "name": "Developper",
     "score": 67,
     "coins": 12,
     "t": 1769361473863
@@ -112,11 +118,5 @@
     "score": 10,
     "coins": 0,
     "t": 1769359120131
-  },
-  {
-    "name": "test10",
-    "score": 10,
-    "coins": 0,
-    "t": 1769359199595
   }
 ]
