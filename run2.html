@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>TAP RUN</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; background:#0b0f1a; overflow:hidden; touch-action:none; -webkit-user-select:none; user-select:none; }
+    canvas { display:block; width:100vw; height:100vh; }
+
+    .hud{
+      position:fixed; inset:0; padding:12px 14px;
+      font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color:#e8efff; pointer-events:none;
+      text-shadow:0 1px 0 rgba(0,0,0,.35);
+      display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+    }
+    .hud .right{ display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap; justify-content:flex-end; }
+
+    .btn{
+      pointer-events:auto; -webkit-tap-highlight-color:transparent;
+      background:rgba(14,18,32,.78); border:1px solid rgba(255,255,255,.12);
+      border-radius:14px; padding:9px 12px; font-size:12px; color:#e8efff;
+      box-shadow:0 10px 30px rgba(0,0,0,.25); backdrop-filter:blur(10px);
+      cursor:pointer;
+    }
+    .btn:active{ transform:translateY(1px); }
+
+    .panel{
+      position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+      width:min(86vw, 460px);
+      background:rgba(14,18,32,.78); border:1px solid rgba(255,255,255,.10);
+      border-radius:16px; padding:16px 16px 14px;
+      box-shadow:0 10px 30px rgba(0,0,0,.35); backdrop-filter:blur(10px);
+      color:#e8efff; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      text-align:center; pointer-events:auto; white-space:pre-line;
+    }
+    .panel h1{ margin:0 0 6px; font-size:20px; letter-spacing:.5px; }
+    .panel p { margin:6px 0; font-size:13px; opacity:.92; line-height:1.45; }
+    .hint{ opacity:.75; font-size:12px; margin-top:10px; }
+    .badge{
+      display:inline-block; padding:3px 8px; border-radius:999px;
+      background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.10);
+      font-size:12px; margin:4px 4px 0;
+    }
+
+    .rankList{
+      text-align:left; margin-top:10px; max-height:52vh; overflow:auto;
+      border-top:1px solid rgba(255,255,255,.10);
+    }
+    .rankRow{
+      display:flex; justify-content:space-between; gap:10px;
+      padding:7px 2px; border-bottom:1px solid rgba(255,255,255,.08);
+      font-variant-numeric:tabular-nums;
+    }
+    .rankRow .no{ width:46px; opacity:.85; }
+    .rankRow .name{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rankRow .sc{ width:76px; text-align:right; }
+    .subNote{ opacity:.75; font-size:12px; margin-top:6px; }
+    .warn{ opacity:.85; font-size:12px; margin-top:8px; color:rgba(255,200,160,.95); }
+    .rowBtns{ margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="hud">
+  <div>
+    <div id="score">SCORE: 0</div>
+    <div id="coins" style="opacity:.85;font-size:12px;margin-top:4px;">COINS: 0</div>
+    <div id="best" style="opacity:.75;font-size:12px;margin-top:4px;">BEST: 0</div>
+  </div>
+  <div class="right">
+    <button id="btnRank" class="btn" type="button">WORLD RANK</button>
+    <button id="btnName" class="btn" type="button">NAME</button>
+    <button id="btnBgm" class="btn" type="button">BGM: ON</button>
+    <div id="state" style="opacity:.85;font-size:12px;margin-top:2px;"></div>
+  </div>
+</div>
+
+<div id="panel" class="panel" style="display:none;">
+  <h1 id="panelTitle">TAP RUN</h1>
+  <p id="panelText"></p>
+  <div id="autoMsg" class="subNote" style="margin-top:10px;"></div>
+  <div class="hint">
+    <span class="badge">タップ/Space/↑：ジャンプ（2回まで）</span>
+    <span class="badge">コイン：+5点</span>
+    <span class="badge">10秒ごとBONUS：大コイン +20点</span>
+    <span class="badge">NAME：右上で変更</span>
+    <span class="badge">GAME OVER：画面どこでもタップで再開</span>
+  </div>
+</div>
+
+<div id="rankModal" class="panel" style="display:none;">
+  <h1>WORLD RANKING</h1>
+  <div class="subNote">上位20件</div>
+  <div id="rankWarn" class="warn" style="display:none;"></div>
+  <div id="rankList" class="rankList"></div>
+  <div class="rowBtns" style="margin-top:12px;">
+    <button id="btnRefreshRank" class="btn" type="button">REFRESH</button>
+    <button id="btnCloseRank" class="btn" type="button">CLOSE</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ====== SETTINGS ======
+  const OWNER = "h6446123-cmyk";
+  const LB_REPO = "run2-leaderboard";
+  const LB_URL = `https://${OWNER}.github.io/${LB_REPO}/leaderboard.json`;
+  const SUBMIT_ENDPOINT = "https://cool-bush-95d1.h6446123.workers.dev/submit";
+
+  const NAME_KEY = "run2_username_v1";
+  const BEST_KEY = "tap_run_best_v3";
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
+  }
+  function normName(v){ return (String(v || "").trim().slice(0,16) || "PLAYER"); }
+  function getName(){ return normName(localStorage.getItem(NAME_KEY) || "PLAYER"); }
+  function setNamePrompt(){
+    const cur = getName();
+    const v = prompt("ユーザー名（16文字まで）", cur);
+    if (v === null) return cur;
+    const nm = normName(v);
+    localStorage.setItem(NAME_KEY, nm);
+    return nm;
+  }
+
+  // ===== Canvas setup =====
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  function resize() {
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    canvas.width  = Math.floor(innerWidth  * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    canvas.style.width  = innerWidth + "px";
+    canvas.style.height = innerHeight + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener("resize", resize, { passive: true });
+  resize();
+
+  // ===== UI =====
+  const scoreEl = document.getElementById("score");
+  const coinsEl = document.getElementById("coins");
+  const bestEl  = document.getElementById("best");
+  const stateEl = document.getElementById("state");
+  const btnBgm  = document.getElementById("btnBgm");
+  const btnRank = document.getElementById("btnRank");
+  const btnName = document.getElementById("btnName");
+
+  const panel = document.getElementById("panel");
+  const panelTitle = document.getElementById("panelTitle");
+  const panelText  = document.getElementById("panelText");
+  const autoMsg    = document.getElementById("autoMsg");
+
+  const rankModal = document.getElementById("rankModal");
+  const rankList  = document.getElementById("rankList");
+  const rankWarn  = document.getElementById("rankWarn");
+  const btnCloseRank = document.getElementById("btnCloseRank");
+  const btnRefreshRank = document.getElementById("btnRefreshRank");
+
+  function showPanel(v){ panel.style.display = v ? "block" : "none"; }
+  function showRank(v){ rankModal.style.display = v ? "block" : "none"; }
+
+  // ===== Name init =====
+  if (!localStorage.getItem(NAME_KEY)) {
+    const nm = setNamePrompt();
+    autoMsg.textContent = `NAME: ${nm}`;
+  }
+  btnName.textContent = "NAME: " + getName();
+
+  btnName.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const nm = setNamePrompt();
+    btnName.textContent = "NAME: " + nm;
+  }, { passive:false });
+
+  // ===== Ranking fetch =====
+  async function fetchWorldTop(){
+    const res = await fetch(LB_URL + "?t=" + Date.now(), { cache: "no-store" });
+    if(!res.ok) throw new Error("fetch failed: " + res.status);
+    const json = await res.json();
+    if(!Array.isArray(json)) throw new Error("bad json");
+    return json;
+  }
+
+  async function openWorldRank(){
+    rankWarn.style.display = "none";
+    rankList.innerHTML = "<div style='padding:10px 2px; opacity:.85;'>Loading...</div>";
+    showRank(true);
+    try{
+      const rows = await fetchWorldTop();
+      if(!rows.length){
+        rankList.innerHTML = "<div style='padding:10px 2px; opacity:.85;'>まだ記録がありません</div>";
+        return;
+      }
+      rankList.innerHTML = rows.map((r,i)=>`
+        <div class="rankRow">
+          <div class="no">#${i+1}</div>
+          <div class="name">${escapeHtml(r.name ?? "PLAYER")}</div>
+          <div class="sc">${Number(r.score||0)}</div>
+        </div>
+      `).join("");
+    }catch(e){
+      console.warn(e);
+      rankList.innerHTML = "<div style='padding:10px 2px; opacity:.85;'>読み込み失敗</div>";
+      rankWarn.style.display = "block";
+      rankWarn.textContent = "leaderboard.json がまだ反映されてないか、URLが違うかも。";
+    }
+  }
+
+  btnRank.addEventListener("click", (e)=>{ e.preventDefault(); e.stopPropagation(); openWorldRank(); }, { passive:false });
+  btnRefreshRank.addEventListener("click",(e)=>{ e.preventDefault(); e.stopPropagation(); openWorldRank(); }, { passive:false });
+  btnCloseRank.addEventListener("click",(e)=>{ e.preventDefault(); e.stopPropagation(); showRank(false); }, { passive:false });
+
+  // ===== Best =====
+  let bestScore = Number(localStorage.getItem(BEST_KEY) || 0);
+  bestEl.textContent = "BEST: " + bestScore;
+
+  // ===== Auto submit =====
+  async function autoSubmit(score, coins){
+    const name = getName();
+    autoMsg.textContent = "送信中...";
+    try{
+      const r = await fetch(SUBMIT_ENDPOINT, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ name, score, coins })
+      });
+      const t = await r.text();
+      if(!r.ok) throw new Error(t || ("HTTP " + r.status));
+      autoMsg.textContent = `送信OK！（NAME: ${name}）\n反映まで少し待って WORLD RANK→REFRESH してね。`;
+    }catch(e){
+      console.warn(e);
+      autoMsg.textContent = "送信失敗（Worker/GH_TOKEN/通信を確認）";
+    }
+  }
+
+  // ===== Audio =====
+  const audio = { ctx:null, master:null, bgmOn:true, started:false, tempo:120, step:0, nextTime:0, timer:null };
+
+  function ensureAudioAndResume(){
+    if(!audio.started){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return;
+      audio.ctx = new AC();
+      audio.master = audio.ctx.createGain();
+      audio.master.gain.value = 0.22;
+      audio.master.connect(audio.ctx.destination);
+      audio.started = true;
+    }
+    if(audio.ctx && audio.ctx.state === "suspended"){ try{ audio.ctx.resume(); }catch{} }
+    if(audio.started) startBgmScheduler();
+  }
+
+  function midiToHz(m){ return 440 * Math.pow(2, (m - 69) / 12); }
+
+  function startBgmScheduler(){
+    if(!audio.ctx || audio.timer) return;
+    audio.nextTime = audio.ctx.currentTime + 0.05;
+    audio.step = 0;
+    audio.timer = setInterval(()=>{
+      if(!audio.bgmOn) return;
+      const lookAhead = 0.25;
+      while(audio.nextTime < audio.ctx.currentTime + lookAhead){
+        scheduleBgmStep(audio.nextTime, audio.step);
+        const beat = 60 / audio.tempo;
+        const stepDur = beat * 0.5;
+        audio.nextTime += stepDur;
+        audio.step++;
+      }
+    }, 50);
+  }
+
+  function scheduleTone(time, freq, dur, gainVal, type="sine"){
+    const c = audio.ctx; if(!c) return;
+    const osc = c.createOscillator();
+    const g = c.createGain();
+    osc.type = type; osc.frequency.setValueAtTime(freq, time);
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(gainVal, time + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    osc.connect(g); g.connect(audio.master);
+    osc.start(time); osc.stop(time + dur + 0.02);
+  }
+
+  function scheduleBgmStep(time, step){
+    const base = 57;
+    const scale = [0,2,4,7,9,12,14,16];
+    const chord = [0,7,12];
+    const idx = step % 16;
+    const m = base + scale[(idx*3)%scale.length] + (idx>=8?12:0);
+    scheduleTone(time, midiToHz(m), 0.12, 0.030, "triangle");
+    if(idx % 4 === 0){
+      const b = base - 12 + chord[(idx/4)%chord.length];
+      scheduleTone(time, midiToHz(b), 0.16, 0.035, "sine");
+    }
+  }
+
+  function sfx(kind){
+    if(!audio.ctx) return;
+    const t = audio.ctx.currentTime + 0.001;
+    if(kind==="jump"){
+      scheduleTone(t, 740, 0.06, 0.05, "square");
+      scheduleTone(t+0.02, 980, 0.06, 0.04, "square");
+    }else if(kind==="double"){
+      scheduleTone(t, 520, 0.06, 0.05, "square");
+      scheduleTone(t+0.02, 820, 0.07, 0.05, "square");
+    }else if(kind==="coin"){
+      scheduleTone(t, 1200, 0.06, 0.05, "triangle");
+      scheduleTone(t+0.03, 1600, 0.08, 0.04, "triangle");
+    }else if(kind==="bonus"){
+      scheduleTone(t, 980, 0.07, 0.05, "triangle");
+      scheduleTone(t+0.03, 1480, 0.10, 0.05, "triangle");
+      scheduleTone(t+0.08, 1960, 0.10, 0.04, "triangle");
+    }else if(kind==="hit"){
+      scheduleTone(t, 140, 0.18, 0.08, "sawtooth");
+    }else if(kind==="tick"){
+      scheduleTone(t, 520, 0.04, 0.03, "square");
+    }
+  }
+
+  btnBgm.textContent = "BGM: ON";
+  btnBgm.addEventListener("click", (e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    ensureAudioAndResume();
+    audio.bgmOn = !audio.bgmOn;
+    btnBgm.textContent = "BGM: " + (audio.bgmOn ? "ON" : "OFF");
+  }, { passive:false });
+
+  // ===== Game constants =====
+  const G = 2600;
+  const JUMP_V = 920;
+  const DOUBLE_JUMP_V = 860;
+  const HOLD_GRAVITY_MUL = 0.55;
+
+  const BASE_SPEED = 520;
+  const SPEED_UP = 22;
+  const GROUND_H = 110;
+
+  const OB_MIN_GAP = 280;
+  const OB_MAX_GAP = 560;
+
+  const BONUS_EVERY = 10;
+  const BONUS_DURATION = 2.0;
+  const BIG_COIN_VALUE = 20;
+  const BIG_COIN_R = 18;
+
+  // ===== Game state =====
+  let tPrev = performance.now();
+  let running = false;
+  let gameOver = false;
+  let started = false;
+
+  let score = 0;
+  let coinCount = 0;
+  let dist = 0;
+  let speed = BASE_SPEED;
+
+  let holding = false;
+
+  let playTime = 0;
+  let nextBonusAt = BONUS_EVERY;
+  let bonusTimer = 0;
+
+  const player = { x:120, y:0, w:44, h:52, vy:0, onGround:true, coyote:0, jumpBuffer:0, jumpsUsed:0, maxJumps:2 };
+  const obstacles = [];
+  const coins = []; // {x,y,r,val,big}
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function groundY(){ return innerHeight - GROUND_H; }
+
+  function reset(){
+    score=0; coinCount=0; dist=0; speed=BASE_SPEED;
+    obstacles.length=0; coins.length=0;
+    playTime=0; nextBonusAt=BONUS_EVERY; bonusTimer=0;
+    player.y = groundY() - player.h; player.vy=0; player.onGround=true; player.coyote=0; player.jumpBuffer=0; player.jumpsUsed=0;
+    holding=false; running=false; gameOver=false; started=false;
+
+    panelTitle.textContent="TAP RUN";
+    panelText.textContent =
+      "タップでジャンプ！ 2回まで空中ジャンプOK。\n" +
+      "コインは取ると +5 点。\n" +
+      "10秒ごとにBONUS（大コイン +20点）！\n\n" +
+      "タップでスタート！（音もここで有効化）";
+    autoMsg.textContent = `NAME: ${getName()}`;
+    showPanel(true);
+
+    stateEl.textContent="READY";
+    scoreEl.textContent="SCORE: 0";
+    coinsEl.textContent="COINS: 0";
+    btnName.textContent = "NAME: " + getName();
+  }
+
+  function spawnObstacle(x){
+    const gy = groundY();
+    const type = (Math.random()<0.78)?"block":"tall";
+    const w = (type==="block") ? rand(32,54) : rand(40,64);
+    const h = (type==="block") ? rand(34,62) : rand(80,120);
+    const y = gy - h;
+    obstacles.push({ x,y,w,h,type,passed:false });
+    if(Math.random()<0.75) spawnCoinsNear(x);
+  }
+
+  function spawnCoinsNear(x){
+    const gy=groundY();
+    const n=Math.floor(rand(3,7));
+    const spread=rand(70,140);
+    const baseY=gy-rand(120,210);
+    for(let i=0;i<n;i++){
+      const cx=x+40+i*spread;
+      const cy=baseY - Math.sin((i/Math.max(1,n-1))*Math.PI)*rand(18,42);
+      coins.push({ x:cx, y:cy, r:10, val:5, big:false });
+    }
+  }
+
+  function spawnBigCoin(){
+    const gy=groundY();
+    const cx=innerWidth + rand(420,620);
+    const cy=gy - rand(150,240);
+    coins.push({ x:cx, y:cy, r:BIG_COIN_R, val:BIG_COIN_VALUE, big:true });
+    sfx("tick");
+  }
+
+  function ensureObstacles(){
+    if(obstacles.length===0){
+      spawnObstacle(innerWidth+220);
+      spawnObstacle(innerWidth+220+rand(OB_MIN_GAP, OB_MAX_GAP));
+      return;
+    }
+    const last=obstacles[obstacles.length-1];
+    if(last.x < innerWidth + 900){
+      const nx = last.x + rand(OB_MIN_GAP, OB_MAX_GAP) - Math.min(180, speed*0.08);
+      spawnObstacle(nx);
+    }
+  }
+
+  function requestJump(){
+    if(!started){
+      started=true; running=true; showPanel(false); stateEl.textContent="";
+    }
+    if(gameOver){
+      reset(); ensureObstacles(); return;
+    }
+    player.jumpBuffer = 0.12;
+  }
+
+  // 画面どこでも開始/再開。ただしボタン操作は邪魔しない
+  function isOnButton(e){
+    return !!(e && e.target && e.target.closest && e.target.closest("button"));
+  }
+  function onDown(e){
+    if (isOnButton(e)) return;          // ボタンは素通し
+    e.preventDefault();
+    ensureAudioAndResume();
+    holding=true;
+    requestJump();
+  }
+  function onUp(e){
+    if (isOnButton(e)) return;          // ★ここが修正：ボタン上のUPでclickを潰さない
+    e.preventDefault();
+    holding=false;
+  }
+
+  window.addEventListener("pointerdown", onDown, { passive:false });
+  window.addEventListener("pointerup", onUp, { passive:false });
+  window.addEventListener("pointercancel", onUp, { passive:false });
+  window.addEventListener("touchstart", onDown, { passive:false });
+  window.addEventListener("touchend", onUp, { passive:false });
+
+  addEventListener("keydown", (e)=>{
+    if(e.code==="Space" || e.code==="ArrowUp"){
+      e.preventDefault();
+      ensureAudioAndResume();
+      requestJump();
+    }
+  }, { passive:false });
+
+  function aabb(ax,ay,aw,ah,bx,by,bw,bh){
+    return ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
+  }
+
+  function doJump(isDouble){
+    player.vy = -(isDouble ? DOUBLE_JUMP_V : JUMP_V);
+    player.onGround=false;
+    player.coyote=0;
+    player.jumpsUsed = Math.min(player.maxJumps, player.jumpsUsed+1);
+    sfx(isDouble ? "double" : "jump");
+  }
+
+  function triggerBonus(){
+    bonusTimer = BONUS_DURATION;
+    stateEl.textContent = "BONUS!";
+    spawnBigCoin();
+  }
+
+  function update(dt){
+    const gy = groundY();
+    speed = BASE_SPEED + (dist/1200)*SPEED_UP;
+
+    playTime += dt;
+    if(playTime >= nextBonusAt){
+      triggerBonus();
+      nextBonusAt += BONUS_EVERY;
+    }
+    if(bonusTimer > 0){
+      bonusTimer -= dt;
+      if(bonusTimer <= 0) stateEl.textContent="";
+    }
+
+    player.coyote = Math.max(0, player.coyote - dt);
+    player.jumpBuffer = Math.max(0, player.jumpBuffer - dt);
+
+    if(player.y + player.h >= gy){
+      player.y = gy - player.h;
+      player.vy = 0;
+      player.onGround = true;
+      player.jumpsUsed = 0;
+    }else{
+      if(player.onGround) player.coyote = 0.10;
+      player.onGround = false;
+    }
+
+    if(player.jumpBuffer > 0){
+      if(player.onGround || player.coyote > 0){
+        doJump(false); player.jumpBuffer=0;
+      }else if(player.jumpsUsed < player.maxJumps){
+        doJump(true); player.jumpBuffer=0;
+      }
+    }
+
+    const gMul = (holding && player.vy < 0) ? HOLD_GRAVITY_MUL : 1.0;
+    player.vy += G * gMul * dt;
+    player.y  += player.vy * dt;
+
+    const dx = speed * dt;
+    dist += dx;
+
+    for(const ob of obstacles){
+      ob.x -= dx;
+      if(!ob.passed && ob.x + ob.w < player.x){
+        ob.passed = true;
+        score += 1;
+        scoreEl.textContent = "SCORE: " + score;
+      }
+      const pad=6;
+      if(aabb(player.x+pad, player.y+pad, player.w-2*pad, player.h-2*pad, ob.x, ob.y, ob.w, ob.h)){
+        die();
+      }
+    }
+
+    // ===== coin collision (やさしく) =====
+    const px = player.x + player.w*0.5;
+    const py = player.y + player.h*0.5;
+
+    // ★修正：プレイヤー半径を大きめ + 余裕マージン
+    const pr = Math.min(player.w, player.h) * 0.34;
+    const EXTRA = 8; // 取りやすさ（大きいほど優しい）
+
+    for(let i=coins.length-1;i>=0;i--){
+      const c=coins[i];
+      c.x -= dx;
+
+      const dxp=c.x-px, dyp=c.y-py;
+      const rr = (c.r + pr + EXTRA + (c.big ? 4 : 0)); // ★大コインはさらに優しく
+      if(dxp*dxp + dyp*dyp <= rr*rr){
+        coins.splice(i,1);
+        coinCount += 1;
+        score += (c.val || 5);
+        coinsEl.textContent = "COINS: " + coinCount;
+        scoreEl.textContent = "SCORE: " + score;
+        sfx(c.big ? "bonus" : "coin");
+      }
+    }
+
+    while(obstacles.length && obstacles[0].x + obstacles[0].w < -120) obstacles.shift();
+    while(coins.length && coins[0].x + coins[0].r < -120) coins.shift();
+
+    ensureObstacles();
+  }
+
+  function die(){
+    if(gameOver) return;
+    running=false; gameOver=true;
+    sfx("hit");
+
+    bestScore = Math.max(bestScore, score);
+    localStorage.setItem(BEST_KEY, String(bestScore));
+    bestEl.textContent = "BEST: " + bestScore;
+
+    stateEl.textContent = "GAME OVER";
+    panelTitle.textContent = "GAME OVER";
+    panelText.textContent =
+      `SCORE: ${score}\nCOINS: ${coinCount}\nBEST: ${bestScore}\n\n` +
+      `自動でランキング送信します…\n` +
+      `画面どこでもタップで再開`;
+    showPanel(true);
+
+    autoSubmit(score, coinCount);
+  }
+
+  function draw(){
+    const w=innerWidth, h=innerHeight;
+    const gy=groundY();
+    ctx.fillStyle="#0b0f1a";
+    ctx.fillRect(0,0,w,h);
+
+    ctx.fillStyle="#ffffff";
+    const starCount=70;
+    const tt=performance.now()*0.00005;
+    for(let i=0;i<starCount;i++){
+      const sx=(i*97 + (dist*0.08)) % w;
+      const sy=(i*53) % (gy-40);
+      const r=(i%3===0)?2:1;
+      ctx.globalAlpha=0.25 + (i%5)*0.08;
+      ctx.fillRect(w - sx, sy + 10 + Math.sin(tt+i)*2, r, r);
+    }
+    ctx.globalAlpha=1;
+
+    ctx.fillStyle="#101a33";
+    ctx.fillRect(0, gy, w, h-gy);
+    ctx.fillStyle="rgba(255,255,255,.08)";
+    ctx.fillRect(0, gy, w, 2);
+
+    for(const c of coins){
+      const isBig=!!c.big;
+      ctx.globalAlpha=isBig?0.95:0.9;
+
+      ctx.fillStyle=isBig?"rgba(255,170,60,.22)":"rgba(255,215,64,.20)";
+      ctx.beginPath(); ctx.arc(c.x, c.y, c.r + (isBig?8:4), 0, Math.PI*2); ctx.fill();
+
+      ctx.fillStyle=isBig?"#ffb24a":"#ffd240";
+      ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI*2); ctx.fill();
+
+      ctx.fillStyle=isBig?"rgba(255,255,255,.28)":"rgba(255,255,255,.22)";
+      ctx.beginPath(); ctx.arc(c.x-3, c.y-3, Math.max(2, c.r*0.35), 0, Math.PI*2); ctx.fill();
+
+      if(isBig){
+        ctx.globalAlpha=0.9;
+        ctx.fillStyle="rgba(11,15,26,.55)";
+        ctx.beginPath(); ctx.arc(c.x, c.y, Math.max(4, c.r*0.38), 0, Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha=1;
+    }
+
+    for(const ob of obstacles){
+      ctx.fillStyle="rgba(90,170,255,.18)";
+      ctx.fillRect(ob.x-3, ob.y-3, ob.w+6, ob.h+6);
+      ctx.fillStyle="#2f6bff";
+      ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
+      ctx.fillStyle="rgba(255,255,255,.18)";
+      ctx.fillRect(ob.x+3, ob.y+3, Math.max(0, ob.w-6), 6);
+    }
+
+    ctx.fillStyle="rgba(255,255,255,.16)";
+    ctx.fillRect(player.x-3, player.y-3, player.w+6, player.h+6);
+
+    ctx.fillStyle="#e8efff";
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+
+    ctx.fillStyle="#0b0f1a";
+    ctx.fillRect(player.x+10, player.y+12, player.w-20, 12);
+
+    if(!started && !gameOver){
+      ctx.fillStyle="rgba(255,255,255,.75)";
+      ctx.font="600 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+      ctx.fillText("TAP / CLICK TO START (DOUBLE JUMP OK)", 14, gy - 20);
+    }
+
+    if(bonusTimer>0 && !gameOver){
+      ctx.globalAlpha=0.12;
+      ctx.fillStyle="#ffb24a";
+      ctx.fillRect(0,0,w,56);
+      ctx.globalAlpha=1;
+    }
+  }
+
+  function loop(now){
+    const dt = Math.min(0.033, (now - tPrev)/1000);
+    tPrev = now;
+    if(running) update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // init
+  reset();
+  ensureObstacles();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
