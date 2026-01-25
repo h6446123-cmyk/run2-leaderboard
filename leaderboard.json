@@ -6,6 +6,12 @@
     "t": 1769363059062
   },
   {
+    "name": "yesman",
+    "score": 93,
+    "coins": 17,
+    "t": 1769363109574
+  },
+  {
     "name": "Developper",
     "score": 89,
     "coins": 16,
@@ -112,11 +118,5 @@
     "score": 6,
     "coins": 1,
     "t": 1769362160843
-  },
-  {
-    "name": "Developper",
-    "score": 6,
-    "coins": 1,
-    "t": 1769363072331
   }
 ]
