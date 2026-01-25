@@ -1,0 +1,134 @@
+name: Update Leaderboard
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Update leaderboard.json
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const https = require("https");
+
+          const title = process.env.ISSUE_TITLE || "";
+          const body  = process.env.ISSUE_BODY  || "";
+          const num   = process.env.ISSUE_NUMBER || "";
+          const repo  = process.env.REPO || "";
+          const token = process.env.GITHUB_TOKEN || "";
+
+          // スコア投稿Issueだけ処理
+          if (!title.startsWith("RUN SCORE:")) {
+            console.log("Not a score issue. Skip.");
+            process.exit(0);
+          }
+
+          function pick(re, def=""){
+            const m = body.match(re);
+            return m ? String(m[1]).trim() : def;
+          }
+
+          const nameRaw  = pick(/NAME:\s*(.+)/i, "PLAYER").slice(0,16);
+          const score = Number(pick(/SCORE:\s*([0-9]+)/i, "0")) || 0;
+          const coins = Number(pick(/COINS:\s*([0-9]+)/i, "0")) || 0;
+
+          if (score < 0 || score > 999999) process.exit(0);
+          if (coins < 0 || coins > 999999) process.exit(0);
+
+          const path = "leaderboard.json";
+          let lb = [];
+          try { lb = JSON.parse(fs.readFileSync(path, "utf8")); } catch { lb = []; }
+          if (!Array.isArray(lb)) lb = [];
+
+          function keyOf(n){ return String(n||"").trim().toLowerCase(); }
+          function normItem(it){
+            return {
+              name: String(it.name || "PLAYER").slice(0,16),
+              score: Number(it.score || 0) || 0,
+              coins: Number(it.coins || 0) || 0,
+              t: Number(it.t || 0) || 0
+            };
+          }
+          function better(a,b){
+            if (a.score !== b.score) return a.score > b.score;
+            if (a.coins !== b.coins) return a.coins > b.coins;
+            return a.t > b.t; // 同点なら新しい方
+          }
+
+          const bestByName = new Map();
+
+          // 既存を取り込み（同名は最強だけ）
+          for (const it of lb) {
+            if (!it || typeof it !== "object") continue;
+            const v = normItem(it);
+            const k = keyOf(v.name);
+            const cur = bestByName.get(k);
+            if (!cur || better(v, cur)) bestByName.set(k, v);
+          }
+
+          // 新規スコアを反映（同名は更新）
+          const newItem = { name: nameRaw, score, coins, t: Date.now() };
+          const kNew = keyOf(newItem.name);
+          const cur = bestByName.get(kNew);
+          if (!cur || better(newItem, cur)) bestByName.set(kNew, newItem);
+
+          // ランキング化（上位20）
+          lb = Array.from(bestByName.values());
+          lb.sort((a,b)=> (b.score-a.score) || (b.coins-a.coins) || (b.t-a.t));
+          lb = lb.slice(0, 20);
+
+          fs.writeFileSync(path, JSON.stringify(lb, null, 2));
+
+          // Commit leaderboard.json
+          const { execSync } = require("child_process");
+          execSync('git config user.name "github-actions[bot]"');
+          execSync('git config user.email "github-actions[bot]@users.noreply.github.com"');
+          execSync('git add leaderboard.json');
+          execSync(`git commit -m "Update leaderboard (issue #${num})" || true`);
+          execSync('git push');
+
+          // Issueを自動で閉じる（邪魔なら消してOK）
+          if (token) {
+            const data = JSON.stringify({ state: "closed" });
+            const opt = {
+              hostname: "api.github.com",
+              path: `/repos/${repo}/issues/${num}`,
+              method: "PATCH",
+              headers: {
+                "User-Agent": "leaderboard-bot",
+                "Authorization": `Bearer ${token}`,
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(data)
+              }
+            };
+            const req = https.request(opt, res => {
+              console.log("Close issue status:", res.statusCode);
+              res.on("data", ()=>{});
+            });
+            req.on("error", e => console.log("Close issue error:", e.message));
+            req.write(data);
+            req.end();
+          }
+
+          console.log("Updated leaderboard:", { name: nameRaw, score, coins });
+          NODE
