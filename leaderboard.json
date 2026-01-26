@@ -1,5 +1,11 @@
 [
   {
+    "name": "pokochin",
+    "score": 177,
+    "coins": 29,
+    "t": 1769399739541
+  },
+  {
     "name": "んぽこどっこいしょ",
     "score": 176,
     "coins": 30,
@@ -46,12 +52,6 @@
     "score": 93,
     "coins": 17,
     "t": 1769399673826
-  },
-  {
-    "name": "pokochin",
-    "score": 78,
-    "coins": 14,
-    "t": 1769399689598
   },
   {
     "name": "test",
