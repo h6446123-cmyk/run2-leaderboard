@@ -24,7 +24,7 @@
       display:flex; justify-content: space-between; align-items:flex-start;
       gap: 10px;
     }
-    .hud .right { display:flex; gap:10px; align-items:flex-start; }
+    .hud .right { display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap; justify-content:flex-end; }
 
     .btn {
       pointer-events: auto;
@@ -41,6 +41,7 @@
     }
     .btn:active { transform: translateY(1px); }
 
+    /* Start/GameOver panel (タップはcanvasで拾うのでpointer-events:none) */
     .panel {
       position: fixed; left: 50%; top: 50%;
       transform: translate(-50%, -50%);
@@ -55,7 +56,7 @@
       text-align: center;
       white-space: pre-line;
       display:none;
-      pointer-events: auto; /* モーダル内操作できる */
+      pointer-events: none;
     }
     .panel h1 { margin: 0 0 6px; font-size: 20px; letter-spacing: .5px; }
     .panel p  { margin: 6px 0; font-size: 13px; opacity: .92; line-height: 1.45; }
@@ -69,19 +70,34 @@
       margin: 4px 4px 0;
     }
 
-    /* Ranking modal */
-    .rank-head{
+    /* Ranking modal (操作するのでpointer-events:auto) */
+    .modal {
+      position: fixed; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92vw, 560px);
+      background: rgba(14,18,32,.86);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 16px;
+      padding: 14px 14px 12px;
+      box-shadow: 0 12px 34px rgba(0,0,0,.45);
+      backdrop-filter: blur(12px);
+      color: #e8efff;
+      display:none;
+      pointer-events: auto;
+    }
+    .modal-head{
       display:flex; justify-content:space-between; align-items:center;
       gap: 10px; margin-bottom: 8px;
     }
-    .rank-title{ font-size:18px; font-weight:700; letter-spacing:.3px; }
-    .rank-actions{ display:flex; gap:8px; }
+    .modal-title{ font-size:18px; font-weight:800; letter-spacing:.3px; }
+    .modal-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+
     .rank-box{
       margin-top: 10px;
       border: 1px solid rgba(255,255,255,.10);
       border-radius: 12px;
       background: rgba(0,0,0,.18);
-      max-height: min(52vh, 440px);
+      max-height: min(52vh, 460px);
       overflow:auto;
       -webkit-overflow-scrolling: touch;
       text-align:left;
@@ -89,17 +105,19 @@
     }
     .rank-row{
       display:grid;
-      grid-template-columns: 52px 1fr 110px 90px;
+      grid-template-columns: 56px 1fr 110px 90px;
       gap: 8px;
       align-items:center;
       padding: 8px 10px;
       border-radius: 10px;
     }
     .rank-row:nth-child(odd){ background: rgba(255,255,255,.04); }
-    .rank-rank{ opacity:.9; font-weight:700; }
+    .rank-rank{ opacity:.9; font-weight:800; }
     .rank-name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .rank-score{ text-align:right; font-variant-numeric: tabular-nums; font-weight:700; }
+    .rank-score{ text-align:right; font-variant-numeric: tabular-nums; font-weight:800; }
     .rank-coins{ text-align:right; opacity:.9; font-variant-numeric: tabular-nums; }
+
+    .small{ font-size:12px; opacity:.75; line-height:1.35; }
 
     .form{
       margin-top: 12px;
@@ -121,9 +139,6 @@
       display:flex; gap:8px; flex-wrap:wrap;
       justify-content:flex-end;
     }
-    .small{
-      font-size:12px; opacity:.75; line-height:1.35;
-    }
   </style>
 </head>
 <body>
@@ -138,12 +153,13 @@
 
   <div class="right">
     <button id="btnRank" class="btn" type="button">WORLD RANK</button>
+    <button id="btnName" class="btn" type="button">NAME</button>
     <button id="btnBgm" class="btn" type="button">BGM: ON</button>
     <div id="state" style="opacity:.85;font-size:12px;margin-top:2px;"></div>
   </div>
 </div>
 
-<!-- Start/GameOver panel -->
+<!-- Start/GameOver -->
 <div id="panel" class="panel">
   <h1 id="panelTitle">TAP RUN</h1>
   <p id="panelText"></p>
@@ -154,28 +170,28 @@
   </div>
 </div>
 
-<!-- Ranking modal -->
-<div id="rankModal" class="panel">
-  <div class="rank-head">
-    <div class="rank-title">WORLD RANKING</div>
-    <div class="rank-actions">
+<!-- Ranking / Name modal -->
+<div id="rankModal" class="modal">
+  <div class="modal-head">
+    <div class="modal-title">WORLD RANKING</div>
+    <div class="modal-actions">
       <button id="btnRankRefresh" class="btn" type="button">更新</button>
       <button id="btnRankClose" class="btn" type="button">閉じる</button>
     </div>
   </div>
 
   <div class="small" id="rankInfo">ランキング読み込み中…</div>
-
   <div id="rankList" class="rank-box"></div>
 
   <div class="form">
-    <label>名前（ランキング送信用）</label>
+    <label>NAME（ランキング送信に使う）</label>
     <input id="nameInput" maxlength="16" placeholder="PLAYER" />
     <div class="small">
       今回のスコア：<span id="lastScore">0</span> / COINS：<span id="lastCoins">0</span><br>
-      ※送信は GAME OVER 後に有効（同じゲーム中の二重送信はしない）
+      ※送信は GAME OVER 後に有効（同じ回の二重送信はしない）
     </div>
     <div class="row">
+      <button id="btnNameSave" class="btn" type="button">名前保存</button>
       <button id="btnSubmit" class="btn" type="button">スコア送信</button>
     </div>
     <div class="small" id="submitMsg"></div>
@@ -188,8 +204,7 @@
   // URL設定（あなたの環境）
   // ================================
   const WORKER_URL = "https://cool-bush-95d1.h6446123.workers.dev";
-  // 同じフォルダに leaderboard.json が生成される前提（以前のGitHub Actions方式）
-  const LEADERBOARD_URL = "./leaderboard.json";
+  const LEADERBOARD_URL = "./leaderboard.json"; // 同じフォルダにある想定
 
   // ================================
   // 内部：プレイ回数カウント（表示はしない）
@@ -245,6 +260,7 @@
 
   const btnBgm = document.getElementById("btnBgm");
   const btnRank = document.getElementById("btnRank");
+  const btnName = document.getElementById("btnName");
 
   const rankModal = document.getElementById("rankModal");
   const rankList  = document.getElementById("rankList");
@@ -253,13 +269,14 @@
   const btnRankRefresh = document.getElementById("btnRankRefresh");
 
   const nameInput = document.getElementById("nameInput");
+  const btnNameSave = document.getElementById("btnNameSave");
   const btnSubmit = document.getElementById("btnSubmit");
   const submitMsg = document.getElementById("submitMsg");
   const lastScoreEl = document.getElementById("lastScore");
   const lastCoinsEl = document.getElementById("lastCoins");
 
-  const BEST_KEY = "tap_run_best_v4";
-  const NAME_KEY = "tap_run_name_v1";
+  const BEST_KEY = "tap_run_best_v5";
+  const NAME_KEY = "tap_run_name_v2";
   let bestScore = Number(localStorage.getItem(BEST_KEY) || 0);
   bestEl.textContent = "BEST: " + bestScore;
 
@@ -269,8 +286,7 @@
   function showRank(v) {
     rankModal.style.display = v ? "block" : "none";
     modalOpen = v;
-    // モーダル中はゲーム停止（再開はユーザーのスタートでOK）
-    if (v) running = false;
+    if (v) running = false; // モーダル開いたら一旦止める
   }
 
   // ================================
@@ -387,10 +403,11 @@
   }, { passive: false });
 
   // ================================
-  // Ranking (表示/取得/送信)
+  // Ranking / Name
   // ================================
+  function esc(s){ return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+
   function normalizeLeaderboard(json) {
-    // いろんな形に対応（配列/ {items}/ {scores}/ {leaderboard} など）
     if (Array.isArray(json)) return json;
     if (json && Array.isArray(json.items)) return json.items;
     if (json && Array.isArray(json.scores)) return json.scores;
@@ -399,8 +416,6 @@
     return [];
   }
 
-  function fmt(n){ return String(Number(n||0)); }
-
   async function refreshLeaderboard() {
     rankInfo.textContent = "ランキング読み込み中…";
     rankList.innerHTML = "";
@@ -408,48 +423,65 @@
     try {
       const r = await fetch(`${LEADERBOARD_URL}?v=${Date.now()}`, { cache: "no-store" });
       const j = await r.json();
+
       const items = normalizeLeaderboard(j)
         .map(x => ({
           name: (x.name ?? x.player ?? x.user ?? "PLAYER").toString(),
           score: Number(x.score ?? x.SCORE ?? 0) || 0,
           coins: Number(x.coins ?? x.COIN ?? x.coin ?? 0) || 0
         }))
-        .sort((a,b) => b.score - a.score)
-        .slice(0, 50);
+        .sort((a,b) => b.score - a.score);
 
-      rankInfo.textContent = `TOP ${Math.min(20, items.length)}（更新：${new Date().toLocaleString()}）`;
+      const top = items.slice(0, 50); // ★表示は50位まで
+      rankInfo.textContent = `TOP ${top.length}（${new Date().toLocaleString()}）`;
 
-      const top = items.slice(0,20);
       if (top.length === 0) {
         rankList.innerHTML = `<div class="small" style="padding:10px;">まだランキングがありません。</div>`;
         return;
       }
 
-      rankList.innerHTML = top.map((x, i) => {
-        const rank = i + 1;
-        const safeName = x.name.replace(/[<>&]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[s]));
-        return `
-          <div class="rank-row">
-            <div class="rank-rank">#${rank}</div>
-            <div class="rank-name">${safeName}</div>
-            <div class="rank-score">${fmt(x.score)}</div>
-            <div class="rank-coins">${fmt(x.coins)}</div>
-          </div>
-        `;
-      }).join("");
+      rankList.innerHTML = top.map((x, i) => `
+        <div class="rank-row">
+          <div class="rank-rank">#${i+1}</div>
+          <div class="rank-name">${esc(x.name)}</div>
+          <div class="rank-score">${x.score}</div>
+          <div class="rank-coins">${x.coins}</div>
+        </div>
+      `).join("");
 
     } catch (e) {
       rankInfo.textContent = "ランキングが読み込めませんでした。";
-      rankList.innerHTML = `<div class="small" style="padding:10px;">leaderboard.json が見つからない/壊れている可能性があります。</div>`;
+      rankList.innerHTML =
+        `<div class="small" style="padding:10px;">
+          leaderboard.json が無い/壊れてる可能性があります。<br>
+          （同じフォルダに leaderboard.json があるか確認）
+        </div>`;
     }
   }
 
-  btnRank.addEventListener("click", async () => {
+  btnRank.addEventListener("click", async (e) => {
+    e.preventDefault();
     showRank(true);
     await refreshLeaderboard();
   });
-  btnRankClose.addEventListener("click", () => showRank(false));
-  btnRankRefresh.addEventListener("click", refreshLeaderboard);
+
+  btnName.addEventListener("click", async (e) => {
+    e.preventDefault();
+    showRank(true);
+    await refreshLeaderboard();
+    setTimeout(() => { nameInput.focus(); nameInput.select(); }, 50);
+  });
+
+  btnRankClose.addEventListener("click", (e) => { e.preventDefault(); showRank(false); });
+  btnRankRefresh.addEventListener("click", (e) => { e.preventDefault(); refreshLeaderboard(); });
+
+  function saveNameOnly() {
+    const nm = (nameInput.value || "PLAYER").trim().slice(0,16) || "PLAYER";
+    nameInput.value = nm;
+    localStorage.setItem(NAME_KEY, nm);
+    submitMsg.textContent = `名前を保存しました：${nm}`;
+  }
+  btnNameSave.addEventListener("click", (e) => { e.preventDefault(); saveNameOnly(); });
 
   let lastScore = 0;
   let lastCoins = 0;
@@ -465,7 +497,6 @@
     if (!Number.isFinite(lastScore) || lastScore <= 0) { submitMsg.textContent = "スコアが0のため送信しません。"; return; }
 
     submitMsg.textContent = "送信中…";
-
     try {
       const r = await fetch(`${WORKER_URL}/submit`, {
         method: "POST",
@@ -476,18 +507,16 @@
       if (!r.ok || !j || !j.ok) throw new Error("submit failed");
 
       submittedThisRun = true;
-      submitMsg.textContent = "送信OK！ 反映まで少し時間がかかることがあります。";
+      submitMsg.textContent = "送信OK！反映まで少し時間がかかることがあります。";
       sfx("ok");
 
-      // すぐに更新してみる（Actionsが走るまでは古いこともある）
+      // Actions反映前でも、一応更新してみる
       await refreshLeaderboard();
-
     } catch {
       submitMsg.textContent = "送信に失敗しました（通信/CORS/Worker/GitHub側）。";
     }
   }
-
-  btnSubmit.addEventListener("click", submitScore);
+  btnSubmit.addEventListener("click", (e) => { e.preventDefault(); submitScore(); });
 
   // ================================
   // Game constants
@@ -533,14 +562,14 @@
     maxJumps: 2
   };
 
-  const obstacles = []; // {x,y,w,h,type,passed}
-  const coins = [];     // {x,y,r}
+  const obstacles = [];
+  const coins = [];
 
   function rand(a,b){ return a + Math.random()*(b-a); }
   function groundY(){ return innerHeight - GROUND_H; }
 
   // ================================
-  // Reset / start screen
+  // Reset / start
   // ================================
   function reset() {
     newPlaySession();
@@ -577,7 +606,6 @@
     scoreEl.textContent = "SCORE: 0";
     coinsEl.textContent = "COINS: 0";
 
-    // ranking modalの「今回」を初期化
     lastScore = 0; lastCoins = 0;
     lastScoreEl.textContent = "0";
     lastCoinsEl.textContent = "0";
@@ -629,9 +657,9 @@
   // Input
   // ================================
   function requestJump() {
-    if (modalOpen) return; // ランキング中は反応しない
+    if (modalOpen) return;
 
-    // GAME OVER中のタップは「リセットして即スタート」（1タップで次プレイ開始）
+    // GAME OVER中のタップは「リセットして即スタート」
     if (gameOver) {
       reset();
       ensureObstacles();
@@ -641,7 +669,7 @@
       showPanel(false);
       stateEl.textContent = "";
 
-      recordPlayOnce(); // プレイ開始カウント
+      recordPlayOnce();
       player.jumpBuffer = 0.12;
       return;
     }
@@ -652,9 +680,11 @@
       running = true;
       showPanel(false);
       stateEl.textContent = "";
-
-      recordPlayOnce(); // プレイ開始カウント
+      recordPlayOnce();
     }
+
+    // モーダルで止めていたら復帰
+    if (started && !gameOver && !running) running = true;
 
     player.jumpBuffer = 0.12;
   }
@@ -691,7 +721,7 @@
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
   }
 
-  // コインの「すり抜け」を減らす：水平移動セグメントとの最短距離で判定
+  // コインすり抜け対策：移動セグメント最短距離
   function distPointToSeg(px, py, x1, y1, x2, y2) {
     const vx = x2 - x1, vy = y2 - y1;
     const wx = px - x1, wy = py - y1;
@@ -765,23 +795,19 @@
       }
     }
 
-    // coins (判定改善)
+    // coins（判定改善）
     const px = player.x + player.w * 0.5;
     const py = player.y + player.h * 0.5;
-
-    const pr = Math.min(player.w, player.h) * 0.35; // 0.28 → 0.35で少し拾いやすく
-    const extra = 7; // すり抜け対策の余裕
+    const pr = Math.min(player.w, player.h) * 0.35; // 取りやすく
+    const extra = 7; // すり抜け対策余裕
 
     for (let i = coins.length - 1; i >= 0; i--) {
       const c = coins[i];
-
-      const prevX = c.x; // 今フレーム開始時
-      c.x -= dx;         // 移動後
+      const prevX = c.x;
+      c.x -= dx;
       const newX = c.x;
 
       const rr = (c.r + pr + extra);
-
-      // セグメント（prevX→newX）に対する最短距離
       const d = distPointToSeg(px, py, prevX, c.y, newX, c.y);
 
       if (d <= rr) {
@@ -811,13 +837,12 @@
     localStorage.setItem(BEST_KEY, String(bestScore));
     bestEl.textContent = "BEST: " + bestScore;
 
-    // ランキング送信用に今回スコアを保持
     lastScore = score;
     lastCoins = coinCount;
     lastScoreEl.textContent = String(lastScore);
     lastCoinsEl.textContent = String(lastCoins);
-    submitMsg.textContent = "";
     submittedThisRun = false;
+    submitMsg.textContent = "";
 
     stateEl.textContent = "GAME OVER";
     panelTitle.textContent = "GAME OVER";
@@ -903,7 +928,7 @@
   }
 
   // ================================
-  // Main loop
+  // Loop
   // ================================
   function loop(now) {
     const dt = Math.min(0.033, (now - tPrev) / 1000);
@@ -919,7 +944,6 @@
   reset();
   ensureObstacles();
   requestAnimationFrame(loop);
-
 })();
 </script>
 </body>
