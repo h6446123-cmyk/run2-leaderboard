@@ -4,24 +4,25 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>TAP RUN (No Crouch)</title>
+  <title>TAP RUN</title>
   <style>
     html, body {
       margin: 0; padding: 0; height: 100%;
       background: #0b0f1a; overflow: hidden;
       touch-action: none;
       -webkit-user-select: none; user-select: none;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
     canvas { display:block; width:100vw; height:100vh; }
 
     .hud {
       position: fixed; inset: 0;
       padding: 12px 14px;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       color: #e8efff;
       pointer-events: none;
       text-shadow: 0 1px 0 rgba(0,0,0,.35);
       display:flex; justify-content: space-between; align-items:flex-start;
+      gap: 10px;
     }
     .hud .right { display:flex; gap:10px; align-items:flex-start; }
 
@@ -36,13 +37,14 @@
       color:#e8efff;
       box-shadow: 0 10px 30px rgba(0,0,0,.25);
       backdrop-filter: blur(10px);
+      cursor: pointer;
     }
     .btn:active { transform: translateY(1px); }
 
     .panel {
       position: fixed; left: 50%; top: 50%;
       transform: translate(-50%, -50%);
-      width: min(86vw, 440px);
+      width: min(90vw, 520px);
       background: rgba(14,18,32,.78);
       border: 1px solid rgba(255,255,255,.10);
       border-radius: 16px;
@@ -50,10 +52,10 @@
       box-shadow: 0 10px 30px rgba(0,0,0,.35);
       backdrop-filter: blur(10px);
       color: #e8efff;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       text-align: center;
-      pointer-events: none;
       white-space: pre-line;
+      display:none;
+      pointer-events: auto; /* モーダル内操作できる */
     }
     .panel h1 { margin: 0 0 6px; font-size: 20px; letter-spacing: .5px; }
     .panel p  { margin: 6px 0; font-size: 13px; opacity: .92; line-height: 1.45; }
@@ -66,6 +68,62 @@
       font-size: 12px;
       margin: 4px 4px 0;
     }
+
+    /* Ranking modal */
+    .rank-head{
+      display:flex; justify-content:space-between; align-items:center;
+      gap: 10px; margin-bottom: 8px;
+    }
+    .rank-title{ font-size:18px; font-weight:700; letter-spacing:.3px; }
+    .rank-actions{ display:flex; gap:8px; }
+    .rank-box{
+      margin-top: 10px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 12px;
+      background: rgba(0,0,0,.18);
+      max-height: min(52vh, 440px);
+      overflow:auto;
+      -webkit-overflow-scrolling: touch;
+      text-align:left;
+      padding: 8px;
+    }
+    .rank-row{
+      display:grid;
+      grid-template-columns: 52px 1fr 110px 90px;
+      gap: 8px;
+      align-items:center;
+      padding: 8px 10px;
+      border-radius: 10px;
+    }
+    .rank-row:nth-child(odd){ background: rgba(255,255,255,.04); }
+    .rank-rank{ opacity:.9; font-weight:700; }
+    .rank-name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rank-score{ text-align:right; font-variant-numeric: tabular-nums; font-weight:700; }
+    .rank-coins{ text-align:right; opacity:.9; font-variant-numeric: tabular-nums; }
+
+    .form{
+      margin-top: 12px;
+      display:grid; gap:8px;
+      text-align:left;
+    }
+    .form label{ font-size:12px; opacity:.85; }
+    .form input{
+      width:100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.20);
+      color:#e8efff;
+      padding: 10px 12px;
+      outline:none;
+      font-size: 14px;
+    }
+    .form .row{
+      display:flex; gap:8px; flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .small{
+      font-size:12px; opacity:.75; line-height:1.35;
+    }
   </style>
 </head>
 <body>
@@ -76,31 +134,66 @@
     <div id="score">SCORE: 0</div>
     <div id="coins" style="opacity:.85;font-size:12px;margin-top:4px;">COINS: 0</div>
     <div id="best" style="opacity:.75;font-size:12px;margin-top:4px;">BEST: 0</div>
-    <div id="plays" style="opacity:.75;font-size:12px;margin-top:4px;">PLAYS: -</div>
   </div>
+
   <div class="right">
+    <button id="btnRank" class="btn" type="button">WORLD RANK</button>
     <button id="btnBgm" class="btn" type="button">BGM: ON</button>
     <div id="state" style="opacity:.85;font-size:12px;margin-top:2px;"></div>
   </div>
 </div>
 
-<div id="panel" class="panel" style="display:none;">
+<!-- Start/GameOver panel -->
+<div id="panel" class="panel">
   <h1 id="panelTitle">TAP RUN</h1>
   <p id="panelText"></p>
   <div class="hint">
     <span class="badge">タップ/Space/↑：ジャンプ（2回まで）</span>
     <span class="badge">コイン：+5点</span>
-    <span class="badge">BGM：右上ON/OFF</span>
+    <span class="badge">世界ランキング：右上</span>
+  </div>
+</div>
+
+<!-- Ranking modal -->
+<div id="rankModal" class="panel">
+  <div class="rank-head">
+    <div class="rank-title">WORLD RANKING</div>
+    <div class="rank-actions">
+      <button id="btnRankRefresh" class="btn" type="button">更新</button>
+      <button id="btnRankClose" class="btn" type="button">閉じる</button>
+    </div>
+  </div>
+
+  <div class="small" id="rankInfo">ランキング読み込み中…</div>
+
+  <div id="rankList" class="rank-box"></div>
+
+  <div class="form">
+    <label>名前（ランキング送信用）</label>
+    <input id="nameInput" maxlength="16" placeholder="PLAYER" />
+    <div class="small">
+      今回のスコア：<span id="lastScore">0</span> / COINS：<span id="lastCoins">0</span><br>
+      ※送信は GAME OVER 後に有効（同じゲーム中の二重送信はしない）
+    </div>
+    <div class="row">
+      <button id="btnSubmit" class="btn" type="button">スコア送信</button>
+    </div>
+    <div class="small" id="submitMsg"></div>
   </div>
 </div>
 
 <script>
 (() => {
   // ================================
-  // ★ プレイ回数カウント（/play + /stats）
+  // URL設定（あなたの環境）
   // ================================
   const WORKER_URL = "https://cool-bush-95d1.h6446123.workers.dev";
+  // 同じフォルダに leaderboard.json が生成される前提（以前のGitHub Actions方式）
+  const LEADERBOARD_URL = "./leaderboard.json";
 
+  // ================================
+  // 内部：プレイ回数カウント（表示はしない）
+  // ================================
   function uuid() {
     if (crypto && crypto.randomUUID) return crypto.randomUUID();
     const a = new Uint8Array(16);
@@ -110,45 +203,20 @@
     const hex = [...a].map(b => b.toString(16).padStart(2,"0")).join("");
     return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
   }
-
   let playSid = uuid();
   let playCounted = false;
-
-  function newPlaySession() {
-    playSid = uuid();
-    playCounted = false;
-  }
-
-  async function refreshPlays() {
-    try {
-      const r = await fetch(`${WORKER_URL}/stats`, { cache: "no-store", mode: "cors" });
-      const j = await r.json();
-      if (j && j.ok) playsEl.textContent = `PLAYS: ${j.plays}`;
-    } catch {}
-  }
-
+  function newPlaySession() { playSid = uuid(); playCounted = false; }
   function recordPlayOnce() {
     if (playCounted) return;
     playCounted = true;
-
-    playsEl.textContent = `PLAYS: ... (${playSid.slice(0,8)})`;
-
     fetch(`${WORKER_URL}/play?sid=${encodeURIComponent(playSid)}`, {
-      keepalive: true,
-      cache: "no-store",
-      mode: "cors",
-    })
-      .then(r => r.json())
-      .then(j => {
-        playsEl.textContent = `PLAYS: ${j.plays}`;
-      })
-      .catch(() => {
-        playsEl.textContent = `PLAYS: ERR`;
-        playCounted = false; // 次のタップで再送できるように
-      });
+      keepalive: true, cache: "no-store", mode: "cors"
+    }).catch(() => { playCounted = false; });
   }
 
-  // ===== Canvas setup (retina対応) =====
+  // ================================
+  // Canvas setup
+  // ================================
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d", { alpha: false });
 
@@ -163,22 +231,51 @@
   addEventListener("resize", resize, { passive: true });
   resize();
 
-  // ===== UI =====
+  // ================================
+  // UI
+  // ================================
   const scoreEl = document.getElementById("score");
   const coinsEl = document.getElementById("coins");
   const bestEl  = document.getElementById("best");
-  const playsEl = document.getElementById("plays");
   const stateEl = document.getElementById("state");
-  const panel   = document.getElementById("panel");
+
+  const panel = document.getElementById("panel");
   const panelTitle = document.getElementById("panelTitle");
   const panelText  = document.getElementById("panelText");
-  const btnBgm = document.getElementById("btnBgm");
 
-  const BEST_KEY = "tap_run_best_v3";
+  const btnBgm = document.getElementById("btnBgm");
+  const btnRank = document.getElementById("btnRank");
+
+  const rankModal = document.getElementById("rankModal");
+  const rankList  = document.getElementById("rankList");
+  const rankInfo  = document.getElementById("rankInfo");
+  const btnRankClose   = document.getElementById("btnRankClose");
+  const btnRankRefresh = document.getElementById("btnRankRefresh");
+
+  const nameInput = document.getElementById("nameInput");
+  const btnSubmit = document.getElementById("btnSubmit");
+  const submitMsg = document.getElementById("submitMsg");
+  const lastScoreEl = document.getElementById("lastScore");
+  const lastCoinsEl = document.getElementById("lastCoins");
+
+  const BEST_KEY = "tap_run_best_v4";
+  const NAME_KEY = "tap_run_name_v1";
   let bestScore = Number(localStorage.getItem(BEST_KEY) || 0);
   bestEl.textContent = "BEST: " + bestScore;
 
-  // ===== Audio =====
+  nameInput.value = (localStorage.getItem(NAME_KEY) || "").slice(0,16);
+
+  function showPanel(v) { panel.style.display = v ? "block" : "none"; }
+  function showRank(v) {
+    rankModal.style.display = v ? "block" : "none";
+    modalOpen = v;
+    // モーダル中はゲーム停止（再開はユーザーのスタートでOK）
+    if (v) running = false;
+  }
+
+  // ================================
+  // Audio
+  // ================================
   const audio = {
     ctx: null,
     master: null,
@@ -275,6 +372,9 @@
       scheduleTone(t+0.03, 1600, 0.08, 0.04, "triangle");
     } else if (kind === "hit") {
       scheduleTone(t, 140, 0.18, 0.08, "sawtooth");
+    } else if (kind === "ok") {
+      scheduleTone(t, 660, 0.06, 0.04, "triangle");
+      scheduleTone(t+0.03, 880, 0.08, 0.04, "triangle");
     }
   }
 
@@ -286,7 +386,112 @@
     btnBgm.textContent = "BGM: " + (audio.bgmOn ? "ON" : "OFF");
   }, { passive: false });
 
-  // ===== Game constants =====
+  // ================================
+  // Ranking (表示/取得/送信)
+  // ================================
+  function normalizeLeaderboard(json) {
+    // いろんな形に対応（配列/ {items}/ {scores}/ {leaderboard} など）
+    if (Array.isArray(json)) return json;
+    if (json && Array.isArray(json.items)) return json.items;
+    if (json && Array.isArray(json.scores)) return json.scores;
+    if (json && Array.isArray(json.leaderboard)) return json.leaderboard;
+    if (json && Array.isArray(json.top)) return json.top;
+    return [];
+  }
+
+  function fmt(n){ return String(Number(n||0)); }
+
+  async function refreshLeaderboard() {
+    rankInfo.textContent = "ランキング読み込み中…";
+    rankList.innerHTML = "";
+
+    try {
+      const r = await fetch(`${LEADERBOARD_URL}?v=${Date.now()}`, { cache: "no-store" });
+      const j = await r.json();
+      const items = normalizeLeaderboard(j)
+        .map(x => ({
+          name: (x.name ?? x.player ?? x.user ?? "PLAYER").toString(),
+          score: Number(x.score ?? x.SCORE ?? 0) || 0,
+          coins: Number(x.coins ?? x.COIN ?? x.coin ?? 0) || 0
+        }))
+        .sort((a,b) => b.score - a.score)
+        .slice(0, 50);
+
+      rankInfo.textContent = `TOP ${Math.min(20, items.length)}（更新：${new Date().toLocaleString()}）`;
+
+      const top = items.slice(0,20);
+      if (top.length === 0) {
+        rankList.innerHTML = `<div class="small" style="padding:10px;">まだランキングがありません。</div>`;
+        return;
+      }
+
+      rankList.innerHTML = top.map((x, i) => {
+        const rank = i + 1;
+        const safeName = x.name.replace(/[<>&]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[s]));
+        return `
+          <div class="rank-row">
+            <div class="rank-rank">#${rank}</div>
+            <div class="rank-name">${safeName}</div>
+            <div class="rank-score">${fmt(x.score)}</div>
+            <div class="rank-coins">${fmt(x.coins)}</div>
+          </div>
+        `;
+      }).join("");
+
+    } catch (e) {
+      rankInfo.textContent = "ランキングが読み込めませんでした。";
+      rankList.innerHTML = `<div class="small" style="padding:10px;">leaderboard.json が見つからない/壊れている可能性があります。</div>`;
+    }
+  }
+
+  btnRank.addEventListener("click", async () => {
+    showRank(true);
+    await refreshLeaderboard();
+  });
+  btnRankClose.addEventListener("click", () => showRank(false));
+  btnRankRefresh.addEventListener("click", refreshLeaderboard);
+
+  let lastScore = 0;
+  let lastCoins = 0;
+  let submittedThisRun = false;
+
+  async function submitScore() {
+    const nm = (nameInput.value || "PLAYER").trim().slice(0,16) || "PLAYER";
+    nameInput.value = nm;
+    localStorage.setItem(NAME_KEY, nm);
+
+    if (!gameOver) { submitMsg.textContent = "GAME OVER後に送信できます。"; return; }
+    if (submittedThisRun) { submitMsg.textContent = "この回はもう送信済みです。"; return; }
+    if (!Number.isFinite(lastScore) || lastScore <= 0) { submitMsg.textContent = "スコアが0のため送信しません。"; return; }
+
+    submitMsg.textContent = "送信中…";
+
+    try {
+      const r = await fetch(`${WORKER_URL}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nm, score: lastScore, coins: lastCoins }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || !j.ok) throw new Error("submit failed");
+
+      submittedThisRun = true;
+      submitMsg.textContent = "送信OK！ 反映まで少し時間がかかることがあります。";
+      sfx("ok");
+
+      // すぐに更新してみる（Actionsが走るまでは古いこともある）
+      await refreshLeaderboard();
+
+    } catch {
+      submitMsg.textContent = "送信に失敗しました（通信/CORS/Worker/GitHub側）。";
+    }
+  }
+
+  btnSubmit.addEventListener("click", submitScore);
+
+  // ================================
+  // Game constants
+  // ================================
   const G = 2600;
   const JUMP_V = 920;
   const DOUBLE_JUMP_V = 860;
@@ -299,11 +504,14 @@
   const OB_MIN_GAP = 280;
   const OB_MAX_GAP = 560;
 
-  // ===== Game state =====
+  // ================================
+  // Game state
+  // ================================
   let tPrev = performance.now();
   let running = false;
   let gameOver = false;
   let started = false;
+  let modalOpen = false;
 
   let score = 0;
   let coinCount = 0;
@@ -312,7 +520,6 @@
 
   let holding = false;
 
-  // Player
   const player = {
     x: 120,
     y: 0,
@@ -326,18 +533,18 @@
     maxJumps: 2
   };
 
-  // Obstacles & coins
-  const obstacles = [];
-  const coins = [];
+  const obstacles = []; // {x,y,w,h,type,passed}
+  const coins = [];     // {x,y,r}
 
   function rand(a,b){ return a + Math.random()*(b-a); }
   function groundY(){ return innerHeight - GROUND_H; }
 
-  function showPanel(v) { panel.style.display = v ? "block" : "none"; }
-
+  // ================================
+  // Reset / start screen
+  // ================================
   function reset() {
-    // ★ 次プレイ用 sid を必ず更新
     newPlaySession();
+    submittedThisRun = false;
 
     score = 0;
     coinCount = 0;
@@ -370,11 +577,16 @@
     scoreEl.textContent = "SCORE: 0";
     coinsEl.textContent = "COINS: 0";
 
-    // いまの総プレイ回数を表示（通信できる時だけ更新）
-    refreshPlays();
+    // ranking modalの「今回」を初期化
+    lastScore = 0; lastCoins = 0;
+    lastScoreEl.textContent = "0";
+    lastCoinsEl.textContent = "0";
+    submitMsg.textContent = "";
   }
 
-  // ===== Spawning =====
+  // ================================
+  // Spawning
+  // ================================
   function spawnObstacle(x) {
     const gy = groundY();
     const type = (Math.random() < 0.78) ? "block" : "tall";
@@ -413,8 +625,12 @@
     }
   }
 
-  // ===== Input =====
+  // ================================
+  // Input
+  // ================================
   function requestJump() {
+    if (modalOpen) return; // ランキング中は反応しない
+
     // GAME OVER中のタップは「リセットして即スタート」（1タップで次プレイ開始）
     if (gameOver) {
       reset();
@@ -425,9 +641,7 @@
       showPanel(false);
       stateEl.textContent = "";
 
-      // ★ 次プレイ開始として1回だけ送信
-      recordPlayOnce();
-
+      recordPlayOnce(); // プレイ開始カウント
       player.jumpBuffer = 0.12;
       return;
     }
@@ -439,8 +653,7 @@
       showPanel(false);
       stateEl.textContent = "";
 
-      // ★ プレイ開始として1回だけ送信
-      recordPlayOnce();
+      recordPlayOnce(); // プレイ開始カウント
     }
 
     player.jumpBuffer = 0.12;
@@ -471,12 +684,29 @@
     }
   }, { passive: false });
 
-  // ===== Collision =====
+  // ================================
+  // Collision helpers
+  // ================================
   function aabb(ax, ay, aw, ah, bx, by, bw, bh) {
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
   }
 
-  // ===== Update =====
+  // コインの「すり抜け」を減らす：水平移動セグメントとの最短距離で判定
+  function distPointToSeg(px, py, x1, y1, x2, y2) {
+    const vx = x2 - x1, vy = y2 - y1;
+    const wx = px - x1, wy = py - y1;
+    const c1 = vx*wx + vy*wy;
+    if (c1 <= 0) return Math.hypot(px - x1, py - y1);
+    const c2 = vx*vx + vy*vy;
+    if (c2 <= c1) return Math.hypot(px - x2, py - y2);
+    const t = c1 / c2;
+    const bx = x1 + t*vx, by = y1 + t*vy;
+    return Math.hypot(px - bx, py - by);
+  }
+
+  // ================================
+  // Update
+  // ================================
   function doJump(isDouble) {
     player.vy = -(isDouble ? DOUBLE_JUMP_V : JUMP_V);
     player.onGround = false;
@@ -487,7 +717,6 @@
 
   function update(dt) {
     const gy = groundY();
-
     speed = BASE_SPEED + (dist / 1200) * SPEED_UP;
 
     player.coyote = Math.max(0, player.coyote - dt);
@@ -520,6 +749,7 @@
     const dx = speed * dt;
     dist += dx;
 
+    // obstacles
     for (const ob of obstacles) {
       ob.x -= dx;
 
@@ -535,18 +765,26 @@
       }
     }
 
+    // coins (判定改善)
     const px = player.x + player.w * 0.5;
     const py = player.y + player.h * 0.5;
-    const pr = Math.min(player.w, player.h) * 0.28;
+
+    const pr = Math.min(player.w, player.h) * 0.35; // 0.28 → 0.35で少し拾いやすく
+    const extra = 7; // すり抜け対策の余裕
 
     for (let i = coins.length - 1; i >= 0; i--) {
       const c = coins[i];
-      c.x -= dx;
 
-      const dxp = (c.x - px);
-      const dyp = (c.y - py);
-      const rr = (c.r + pr);
-      if (dxp*dxp + dyp*dyp <= rr*rr) {
+      const prevX = c.x; // 今フレーム開始時
+      c.x -= dx;         // 移動後
+      const newX = c.x;
+
+      const rr = (c.r + pr + extra);
+
+      // セグメント（prevX→newX）に対する最短距離
+      const d = distPointToSeg(px, py, prevX, c.y, newX, c.y);
+
+      if (d <= rr) {
         coins.splice(i, 1);
         coinCount += 1;
         score += 5;
@@ -556,6 +794,7 @@
       }
     }
 
+    // cleanup
     while (obstacles.length && obstacles[0].x + obstacles[0].w < -120) obstacles.shift();
     while (coins.length && coins[0].x + coins[0].r < -120) coins.shift();
 
@@ -572,14 +811,24 @@
     localStorage.setItem(BEST_KEY, String(bestScore));
     bestEl.textContent = "BEST: " + bestScore;
 
+    // ランキング送信用に今回スコアを保持
+    lastScore = score;
+    lastCoins = coinCount;
+    lastScoreEl.textContent = String(lastScore);
+    lastCoinsEl.textContent = String(lastCoins);
+    submitMsg.textContent = "";
+    submittedThisRun = false;
+
     stateEl.textContent = "GAME OVER";
     panelTitle.textContent = "GAME OVER";
     panelText.textContent =
-      `SCORE: ${score}\nCOINS: ${coinCount}\nBEST: ${bestScore}\n\nタップでリスタート`;
+      `SCORE: ${score}\nCOINS: ${coinCount}\nBEST: ${bestScore}\n\nタップでリスタート\n（世界ランキングは右上）`;
     showPanel(true);
   }
 
-  // ===== Draw =====
+  // ================================
+  // Draw
+  // ================================
   function draw() {
     const w = innerWidth, h = innerHeight;
     const gy = groundY();
@@ -653,7 +902,9 @@
     }
   }
 
-  // ===== Main loop =====
+  // ================================
+  // Main loop
+  // ================================
   function loop(now) {
     const dt = Math.min(0.033, (now - tPrev) / 1000);
     tPrev = now;
@@ -668,6 +919,7 @@
   reset();
   ensureObstacles();
   requestAnimationFrame(loop);
+
 })();
 </script>
 </body>
