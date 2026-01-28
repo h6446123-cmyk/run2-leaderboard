@@ -24,7 +24,10 @@
       display:flex; justify-content: space-between; align-items:flex-start;
       gap: 10px;
     }
-    .hud .right { display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap; justify-content:flex-end; }
+    .hud .right {
+      display:flex; gap:10px; align-items:flex-start;
+      flex-wrap:wrap; justify-content:flex-end;
+    }
 
     .btn {
       pointer-events: auto;
@@ -41,7 +44,7 @@
     }
     .btn:active { transform: translateY(1px); }
 
-    /* Start/GameOver panel (タップはcanvasで拾うのでpointer-events:none) */
+    /* Start/GameOver panel（タップはcanvasで拾うのでpointer-events:none） */
     .panel {
       position: fixed; left: 50%; top: 50%;
       transform: translate(-50%, -50%);
@@ -70,7 +73,7 @@
       margin: 4px 4px 0;
     }
 
-    /* Ranking modal (操作するのでpointer-events:auto) */
+    /* Modal 共通（操作するので pointer-events:auto） */
     .modal {
       position: fixed; left: 50%; top: 50%;
       transform: translate(-50%, -50%);
@@ -92,6 +95,9 @@
     .modal-title{ font-size:18px; font-weight:800; letter-spacing:.3px; }
     .modal-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 
+    .small{ font-size:12px; opacity:.75; line-height:1.35; }
+
+    /* Ranking list */
     .rank-box{
       margin-top: 10px;
       border: 1px solid rgba(255,255,255,.10);
@@ -105,20 +111,29 @@
     }
     .rank-row{
       display:grid;
-      grid-template-columns: 56px 1fr 110px 90px;
+      grid-template-columns: 56px 1fr 96px 72px;
       gap: 8px;
-      align-items:center;
+      align-items:start;
       padding: 8px 10px;
       border-radius: 10px;
     }
     .rank-row:nth-child(odd){ background: rgba(255,255,255,.04); }
     .rank-rank{ opacity:.9; font-weight:800; }
-    .rank-name{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    /* ★スマホでも名前が全部見えるように折り返し */
+    .rank-name{
+      white-space: normal;
+      word-break: break-all;
+      overflow: visible;
+      line-height: 1.25;
+    }
     .rank-score{ text-align:right; font-variant-numeric: tabular-nums; font-weight:800; }
     .rank-coins{ text-align:right; opacity:.9; font-variant-numeric: tabular-nums; }
 
-    .small{ font-size:12px; opacity:.75; line-height:1.35; }
+    @media (max-width: 420px){
+      .rank-row{ grid-template-columns: 48px 1fr 84px 60px; }
+    }
 
+    /* Form */
     .form{
       margin-top: 12px;
       display:grid; gap:8px;
@@ -149,6 +164,7 @@
     <div id="score">SCORE: 0</div>
     <div id="coins" style="opacity:.85;font-size:12px;margin-top:4px;">COINS: 0</div>
     <div id="best" style="opacity:.75;font-size:12px;margin-top:4px;">BEST: 0</div>
+    <div id="curNameLine" style="opacity:.75;font-size:12px;margin-top:4px;">NAME: <span id="curName">PLAYER</span></div>
   </div>
 
   <div class="right">
@@ -166,11 +182,30 @@
   <div class="hint">
     <span class="badge">タップ/Space/↑：ジャンプ（2回まで）</span>
     <span class="badge">コイン：+5点</span>
-    <span class="badge">世界ランキング：右上</span>
+    <span class="badge">最初に右上NAMEで名前設定</span>
   </div>
 </div>
 
-<!-- Ranking / Name modal -->
+<!-- NAME modal（名前変更専用） -->
+<div id="nameModal" class="modal">
+  <div class="modal-head">
+    <div class="modal-title">NAME</div>
+    <div class="modal-actions">
+      <button id="btnNameClose" class="btn" type="button">閉じる</button>
+    </div>
+  </div>
+
+  <div class="form">
+    <label>プレイヤー名（最大16文字）</label>
+    <input id="nameInput" maxlength="16" placeholder="PLAYER" />
+    <div class="row">
+      <button id="btnNameSave" class="btn" type="button">保存</button>
+    </div>
+    <div class="small" id="nameMsg"></div>
+  </div>
+</div>
+
+<!-- WORLD RANK modal（ランキング専用） -->
 <div id="rankModal" class="modal">
   <div class="modal-head">
     <div class="modal-title">WORLD RANKING</div>
@@ -180,18 +215,20 @@
     </div>
   </div>
 
-  <div class="small" id="rankInfo">ランキング読み込み中…</div>
+  <div class="small" style="margin-top:2px;">
+    現在のNAME：<b id="rankCurName">PLAYER</b>
+    <button id="btnRankToName" class="btn" type="button" style="padding:6px 10px; margin-left:8px;">名前変更</button>
+  </div>
+
+  <div class="small" id="rankInfo" style="margin-top:6px;">ランキング読み込み中…</div>
   <div id="rankList" class="rank-box"></div>
 
   <div class="form">
-    <label>NAME（ランキング送信に使う）</label>
-    <input id="nameInput" maxlength="16" placeholder="PLAYER" />
     <div class="small">
-      今回のスコア：<span id="lastScore">0</span> / COINS：<span id="lastCoins">0</span><br>
+      今回のスコア：<b><span id="lastScore">0</span></b> / COINS：<b><span id="lastCoins">0</span></b><br>
       ※送信は GAME OVER 後に有効（同じ回の二重送信はしない）
     </div>
     <div class="row">
-      <button id="btnNameSave" class="btn" type="button">名前保存</button>
       <button id="btnSubmit" class="btn" type="button">スコア送信</button>
     </div>
     <div class="small" id="submitMsg"></div>
@@ -205,9 +242,10 @@
   // ================================
   const WORKER_URL = "https://cool-bush-95d1.h6446123.workers.dev";
   const LEADERBOARD_URL = "./leaderboard.json"; // 同じフォルダにある想定
+  const SHOW_TOP = 20;
 
   // ================================
-  // 内部：プレイ回数カウント（表示はしない）
+  // 内部：プレイ回数カウント（表示なし）
   // ================================
   function uuid() {
     if (crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -252,41 +290,99 @@
   const scoreEl = document.getElementById("score");
   const coinsEl = document.getElementById("coins");
   const bestEl  = document.getElementById("best");
+  const curNameEl = document.getElementById("curName");
   const stateEl = document.getElementById("state");
 
   const panel = document.getElementById("panel");
   const panelTitle = document.getElementById("panelTitle");
   const panelText  = document.getElementById("panelText");
 
-  const btnBgm = document.getElementById("btnBgm");
+  const btnBgm  = document.getElementById("btnBgm");
   const btnRank = document.getElementById("btnRank");
   const btnName = document.getElementById("btnName");
 
+  // NAME modal
+  const nameModal = document.getElementById("nameModal");
+  const nameInput = document.getElementById("nameInput");
+  const btnNameSave = document.getElementById("btnNameSave");
+  const btnNameClose = document.getElementById("btnNameClose");
+  const nameMsg = document.getElementById("nameMsg");
+
+  // RANK modal
   const rankModal = document.getElementById("rankModal");
   const rankList  = document.getElementById("rankList");
   const rankInfo  = document.getElementById("rankInfo");
   const btnRankClose   = document.getElementById("btnRankClose");
   const btnRankRefresh = document.getElementById("btnRankRefresh");
+  const rankCurName = document.getElementById("rankCurName");
+  const btnRankToName = document.getElementById("btnRankToName");
 
-  const nameInput = document.getElementById("nameInput");
-  const btnNameSave = document.getElementById("btnNameSave");
   const btnSubmit = document.getElementById("btnSubmit");
   const submitMsg = document.getElementById("submitMsg");
   const lastScoreEl = document.getElementById("lastScore");
   const lastCoinsEl = document.getElementById("lastCoins");
 
-  const BEST_KEY = "tap_run_best_v5";
-  const NAME_KEY = "tap_run_name_v2";
+  const BEST_KEY = "tap_run_best_v6";
+  const NAME_KEY = "tap_run_name_v3";
+
   let bestScore = Number(localStorage.getItem(BEST_KEY) || 0);
   bestEl.textContent = "BEST: " + bestScore;
 
-  nameInput.value = (localStorage.getItem(NAME_KEY) || "").slice(0,16);
+  // 現在名
+  let playerName = (localStorage.getItem(NAME_KEY) || "").trim().slice(0,16);
+  if (!playerName) playerName = "PLAYER";
+  curNameEl.textContent = playerName;
+  rankCurName.textContent = playerName;
+  nameInput.value = playerName;
 
   function showPanel(v) { panel.style.display = v ? "block" : "none"; }
-  function showRank(v) {
+
+  let modalOpen = false;
+  function showNameModal(v, focus=true) {
+    nameModal.style.display = v ? "block" : "none";
+    modalOpen = v || (rankModal.style.display === "block");
+    if (v) {
+      running = false;
+      if (focus) setTimeout(() => { nameInput.focus(); nameInput.select(); }, 30);
+    }
+  }
+  function showRankModal(v) {
     rankModal.style.display = v ? "block" : "none";
-    modalOpen = v;
-    if (v) running = false; // モーダル開いたら一旦止める
+    modalOpen = v || (nameModal.style.display === "block");
+    if (v) running = false;
+  }
+
+  function setName(nm, msg="") {
+    playerName = nm;
+    localStorage.setItem(NAME_KEY, nm);
+    curNameEl.textContent = nm;
+    rankCurName.textContent = nm;
+    nameInput.value = nm;
+    nameMsg.textContent = msg;
+  }
+
+  function saveNameOnly() {
+    const nm = (nameInput.value || "PLAYER").trim().slice(0,16) || "PLAYER";
+    setName(nm, `保存しました：${nm}`);
+  }
+
+  btnName.addEventListener("click", (e) => {
+    e.preventDefault();
+    nameMsg.textContent = "";
+    showNameModal(true, true);
+  });
+  btnNameSave.addEventListener("click", (e) => { e.preventDefault(); saveNameOnly(); });
+  btnNameClose.addEventListener("click", (e) => {
+    e.preventDefault();
+    showNameModal(false, false);
+    if (started && !gameOver) running = true;
+  });
+
+  // 初回（または毎回でもOK）：開始前に名前を変えられるように自動で開く
+  const hadNameBefore = !!localStorage.getItem(NAME_KEY);
+  if (!hadNameBefore) {
+    // 初回は自動でNAMEを開く（閉じればプレイOK）
+    setTimeout(() => showNameModal(true, true), 120);
   }
 
   // ================================
@@ -328,7 +424,6 @@
 
     audio.timer = setInterval(() => {
       if (!audio.bgmOn) return;
-
       const lookAhead = 0.25;
       while (audio.nextTime < audio.ctx.currentTime + lookAhead) {
         scheduleBgmStep(audio.nextTime, audio.step);
@@ -403,7 +498,7 @@
   }, { passive: false });
 
   // ================================
-  // Ranking / Name
+  // Ranking
   // ================================
   function esc(s){ return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
 
@@ -432,7 +527,7 @@
         }))
         .sort((a,b) => b.score - a.score);
 
-      const top = items.slice(0, 50); // ★表示は50位まで
+      const top = items.slice(0, SHOW_TOP);
       rankInfo.textContent = `TOP ${top.length}（${new Date().toLocaleString()}）`;
 
       if (top.length === 0) {
@@ -449,7 +544,7 @@
         </div>
       `).join("");
 
-    } catch (e) {
+    } catch {
       rankInfo.textContent = "ランキングが読み込めませんでした。";
       rankList.innerHTML =
         `<div class="small" style="padding:10px;">
@@ -461,37 +556,36 @@
 
   btnRank.addEventListener("click", async (e) => {
     e.preventDefault();
-    showRank(true);
+    rankCurName.textContent = playerName;
+    showRankModal(true);
     await refreshLeaderboard();
   });
 
-  btnName.addEventListener("click", async (e) => {
+  btnRankClose.addEventListener("click", (e) => {
     e.preventDefault();
-    showRank(true);
-    await refreshLeaderboard();
-    setTimeout(() => { nameInput.focus(); nameInput.select(); }, 50);
+    showRankModal(false);
+    if (started && !gameOver) running = true;
   });
 
-  btnRankClose.addEventListener("click", (e) => { e.preventDefault(); showRank(false); });
-  btnRankRefresh.addEventListener("click", (e) => { e.preventDefault(); refreshLeaderboard(); });
+  btnRankRefresh.addEventListener("click", (e) => {
+    e.preventDefault();
+    refreshLeaderboard();
+  });
 
-  function saveNameOnly() {
-    const nm = (nameInput.value || "PLAYER").trim().slice(0,16) || "PLAYER";
-    nameInput.value = nm;
-    localStorage.setItem(NAME_KEY, nm);
-    submitMsg.textContent = `名前を保存しました：${nm}`;
-  }
-  btnNameSave.addEventListener("click", (e) => { e.preventDefault(); saveNameOnly(); });
+  btnRankToName.addEventListener("click", (e) => {
+    e.preventDefault();
+    nameMsg.textContent = "";
+    showNameModal(true, true);
+  });
 
+  // ================================
+  // Score submit
+  // ================================
   let lastScore = 0;
   let lastCoins = 0;
   let submittedThisRun = false;
 
   async function submitScore() {
-    const nm = (nameInput.value || "PLAYER").trim().slice(0,16) || "PLAYER";
-    nameInput.value = nm;
-    localStorage.setItem(NAME_KEY, nm);
-
     if (!gameOver) { submitMsg.textContent = "GAME OVER後に送信できます。"; return; }
     if (submittedThisRun) { submitMsg.textContent = "この回はもう送信済みです。"; return; }
     if (!Number.isFinite(lastScore) || lastScore <= 0) { submitMsg.textContent = "スコアが0のため送信しません。"; return; }
@@ -501,7 +595,7 @@
       const r = await fetch(`${WORKER_URL}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: nm, score: lastScore, coins: lastCoins }),
+        body: JSON.stringify({ name: playerName, score: lastScore, coins: lastCoins }),
       });
       const j = await r.json().catch(() => null);
       if (!r.ok || !j || !j.ok) throw new Error("submit failed");
@@ -510,13 +604,16 @@
       submitMsg.textContent = "送信OK！反映まで少し時間がかかることがあります。";
       sfx("ok");
 
-      // Actions反映前でも、一応更新してみる
       await refreshLeaderboard();
     } catch {
       submitMsg.textContent = "送信に失敗しました（通信/CORS/Worker/GitHub側）。";
     }
   }
-  btnSubmit.addEventListener("click", (e) => { e.preventDefault(); submitScore(); });
+
+  btnSubmit.addEventListener("click", (e) => {
+    e.preventDefault();
+    submitScore();
+  });
 
   // ================================
   // Game constants
@@ -540,7 +637,6 @@
   let running = false;
   let gameOver = false;
   let started = false;
-  let modalOpen = false;
 
   let score = 0;
   let coinCount = 0;
@@ -599,7 +695,7 @@
     panelText.textContent =
       "タップでジャンプ！ 2回まで空中ジャンプOK。\n" +
       "コインは取ると +5 点。\n\n" +
-      "タップでスタート！（音もここで有効化）";
+      "タップでスタート！";
     showPanel(true);
 
     stateEl.textContent = "READY";
@@ -657,7 +753,7 @@
   // Input
   // ================================
   function requestJump() {
-    if (modalOpen) return;
+    if (modalOpen) return; // モーダル中はゲーム操作無効
 
     // GAME OVER中のタップは「リセットして即スタート」
     if (gameOver) {
@@ -682,9 +778,6 @@
       stateEl.textContent = "";
       recordPlayOnce();
     }
-
-    // モーダルで止めていたら復帰
-    if (started && !gameOver && !running) running = true;
 
     player.jumpBuffer = 0.12;
   }
@@ -944,6 +1037,7 @@
   reset();
   ensureObstacles();
   requestAnimationFrame(loop);
+
 })();
 </script>
 </body>
