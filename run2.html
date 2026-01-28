@@ -182,7 +182,7 @@
   <div class="hint">
     <span class="badge">タップ/Space/↑：ジャンプ（2回まで）</span>
     <span class="badge">コイン：+5点</span>
-    <span class="badge">10秒でBONUS（大コイン+20）</span>
+    <span class="badge">10秒ごとBONUS（大コイン+20×1）</span>
   </div>
 </div>
 
@@ -362,9 +362,7 @@
   function saveNameOnlyAndClose() {
     const nm = (nameInput.value || "PLAYER").trim().slice(0,16) || "PLAYER";
     setName(nm, `保存しました：${nm}`);
-    // ★保存したら自動で閉じる
-    showNameModal(false, false);
-    // ゲーム中なら再開
+    showNameModal(false, false); // ★保存したら自動で閉じる
     if (started && !gameOver) running = true;
   }
 
@@ -563,10 +561,16 @@
     if (started && !gameOver) running = true;
   });
   btnRankRefresh.addEventListener("click", (e) => { e.preventDefault(); refreshLeaderboard(); });
-  btnRankToName.addEventListener("click", (e) => { e.preventDefault(); showNameModal(true, true); });
+
+  // 「名前変更」：ランキングを閉じてNAMEを開く（別表示）
+  btnRankToName.addEventListener("click", (e) => {
+    e.preventDefault();
+    showRankModal(false);
+    showNameModal(true, true);
+  });
 
   // ================================
-  // Score submit
+  // Score submit（手動＆ハイスコア自動）
   // ================================
   let lastScore = 0;
   let lastCoins = 0;
@@ -577,7 +581,6 @@
     if (submittedThisRun) return;
     if (!Number.isFinite(lastScore) || lastScore <= 0) return;
 
-    // 画面メッセージ（見える時だけ）
     if (rankModal.style.display === "block") submitMsg.textContent = auto ? "（自動送信中…）" : "送信中…";
 
     try {
@@ -614,11 +617,11 @@
   const OB_MIN_GAP = 280;
   const OB_MAX_GAP = 560;
 
-  // BONUS
-  const BONUS_TRIGGER_SEC = 10.0;  // 10秒で発動
-  const BONUS_SHOW_SEC    = 3.0;   // 表示時間
-  const BONUS_COIN_VALUE  = 20;    // 大コインは+20点
-  const BONUS_COIN_R      = 18;    // 大きさ
+  // BONUS（★10秒ごとに何回も / 大コイン1枚）
+  const BONUS_TRIGGER_SEC = 10.0;
+  const BONUS_SHOW_SEC    = 3.0;
+  const BONUS_COIN_VALUE  = 20;
+  const BONUS_COIN_R      = 18;
 
   // ================================
   // Game state
@@ -637,7 +640,7 @@
 
   // time / bonus
   let runTime = 0;
-  let bonusTriggered = false;
+  let nextBonusAt = BONUS_TRIGGER_SEC;
   let bonusShowLeft = 0;
 
   const player = {
@@ -689,7 +692,7 @@
 
     // time/bonus reset
     runTime = 0;
-    bonusTriggered = false;
+    nextBonusAt = BONUS_TRIGGER_SEC;
     bonusShowLeft = 0;
     if (stateEl.textContent === "BONUS!") stateEl.textContent = "";
 
@@ -738,7 +741,7 @@
 
   function spawnBonusCoin(x) {
     const gy = groundY();
-    const y = gy - rand(160, 240); // 取りやすい高さ
+    const y = gy - rand(160, 240);
     coins.push({ x, y, r: BONUS_COIN_R, value: BONUS_COIN_VALUE, isBonus: true });
   }
 
@@ -761,21 +764,17 @@
   function requestJump() {
     if (modalOpen) return;
 
-    // GAME OVER中のタップは「リセットして即スタート」
     if (gameOver) {
       reset();
       ensureObstacles();
-
       started = true;
       running = true;
       showPanel(false);
-
       recordPlayOnce();
       player.jumpBuffer = 0.12;
       return;
     }
 
-    // 初回スタート
     if (!started) {
       started = true;
       running = true;
@@ -849,18 +848,13 @@
     // 時間
     runTime += dt;
 
-    // BONUS判定（10秒で一回だけ）
-    if (!bonusTriggered && runTime >= BONUS_TRIGGER_SEC) {
-      bonusTriggered = true;
+    // ★BONUS：10秒ごとに何回も / 大コイン1枚
+    while (runTime >= nextBonusAt) {
       bonusShowLeft = BONUS_SHOW_SEC;
       stateEl.textContent = "BONUS!";
-
-      // 大きいコイン(+20)を3枚出す
-      spawnBonusCoin(innerWidth + 220);
-      spawnBonusCoin(innerWidth + 420);
-      spawnBonusCoin(innerWidth + 620);
+      spawnBonusCoin(innerWidth + 320);
+      nextBonusAt += BONUS_TRIGGER_SEC;
     }
-
     if (bonusShowLeft > 0) {
       bonusShowLeft = Math.max(0, bonusShowLeft - dt);
       if (bonusShowLeft === 0 && stateEl.textContent === "BONUS!") stateEl.textContent = "";
@@ -972,10 +966,7 @@
     showPanel(true);
 
     // ★ハイスコアなら自動送信
-    if (isNewBest) {
-      // 少し遅らせて送信（UIの描画が落ち着く）
-      setTimeout(() => submitScore(true), 250);
-    }
+    if (isNewBest) setTimeout(() => submitScore(true), 250);
   }
 
   // ================================
@@ -1027,7 +1018,6 @@
       ctx.arc(c.x-3, c.y-3, Math.max(2, c.r*0.35), 0, Math.PI*2);
       ctx.fill();
 
-      // bonus +20 表示（小さく）
       if (isB) {
         ctx.globalAlpha = 0.85;
         ctx.fillStyle = "#0b0f1a";
@@ -1087,7 +1077,7 @@
   requestAnimationFrame(loop);
 
   // ================================
-  // Rank modal actions
+  // モーダル操作（別表示）
   // ================================
   btnRankClose.addEventListener("click", (e) => {
     e.preventDefault();
@@ -1095,7 +1085,6 @@
     if (started && !gameOver) running = true;
   });
   btnRankRefresh.addEventListener("click", (e) => { e.preventDefault(); refreshLeaderboard(); });
-  btnRankToName.addEventListener("click", (e) => { e.preventDefault(); showNameModal(true, true); });
 
 })();
 </script>
